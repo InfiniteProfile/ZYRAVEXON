@@ -1,45 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#08070d">
-  <meta name="description" content="Explore ZYRAVEXON, a universe of infinitely generated identities.">
-  <title>ZYRAVEXON — Infinite Identities</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="script.js" defer></script>
-</head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="./" aria-label="ZYRAVEXON home"><span class="brand-mark">Z</span><span>ZYRAVEXON</span></a>
-    <nav><a href="#universe">Universe</a><a href="#feed">Discover</a></nav>
-    <button id="open-search" class="icon-button" aria-label="Search identities">⌕</button>
-  </header>
-
-  <main id="universe">
-    <section class="hero">
-      <div class="eyebrow"><span class="pulse"></span> A GENERATIVE IDENTITY UNIVERSE</div>
-      <h1>ONE UNIVERSE.<br><span>INFINITE IDENTITIES.</span></h1>
-      <p>Every number opens a new world. Explore a living constellation of algorithmically generated fictional identities — each with its own name, colors, symbol, and story.</p>
-      <div class="hero-actions"><a class="button primary" href="#feed">Explore universe <span>↘</span></a><button class="button secondary" id="hero-search">Find an identity</button></div>
-      <div class="stats"><div><strong>∞</strong><small>Possible identities</small></div><div><strong>01 → ∞</strong><small>Exact ID navigation</small></div><div><strong>0</strong><small>Accounts required</small></div></div>
-    </section>
-
-    <section class="feed-section" id="feed">
-      <div class="section-heading"><div class="eyebrow">THE DISCOVERY FEED</div><h2>Explore the unknown<span>.</span></h2><div class="active-line"><span class="pulse"></span><span id="status">Preparing universe…</span></div></div>
-      <div class="feed-meta"><span>Generated identities / <strong id="generated-count">0</strong></span><span>Scroll to reveal more</span></div>
-      <div id="profile-grid" class="profile-grid" aria-live="polite"></div>
-      <div id="sentinel" class="sentinel" aria-hidden="true"><span class="loader"></span><span id="load-status">Generating the next worlds…</span></div>
-    </section>
-  </main>
-
-  <dialog id="search-dialog" class="search-dialog">
-    <form method="dialog" class="dialog-head"><div><span class="eyebrow">IDENTITY LOCATOR</span><h2>Find a world</h2></div><button class="icon-button" aria-label="Close search">×</button></form>
-    <form id="search-form" class="search-form"><label for="search-input">Exact profile ID or generated name</label><div class="search-row"><input id="search-input" inputmode="numeric" autocomplete="off" placeholder="Enter an ID or name…" required><button class="button primary" type="submit">Find</button></div><p class="hint">Numeric IDs can be arbitrarily long. Name search checks the currently generated identities and a nearby deterministic range.</p></form>
-    <div id="search-result"></div>
-  </dialog>
-
-  <dialog id="profile-dialog" class="profile-dialog"><button id="close-profile" class="icon-button close-profile" aria-label="Close profile">×</button><div id="profile-detail"></div></dialog>
-  <footer><span>ZYRAVEXON</span><span>ONE REALITY. INFINITE IDENTITIES.</span></footer>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ZYRAVEXON — The Universe of Infinite Identities</title>
+<link rel="stylesheet" href="style.css"></head><body>
+<header><span class="logo">ZYRAVEXON</span>
+<nav><button class="btn" id="exp" aria-label="Explore universe">Explore</button>
+<button class="ib" id="sb" aria-label="Search" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></button></nav></header>
+<div id="sp" role="search"><div class="r"><input id="q" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Profile ID or name" aria-label="Search by profile ID or name"><button class="btn pri" id="go">Go</button></div>
+<div id="msg" role="status" aria-live="polite">Enter any positive whole number to jump straight to it, or part of a name.</div><ul id="res"></ul></div>
+<section class="hero"><h1>ZYRAVEXON</h1><div class="tag">ONE UNIVERSE. INFINITE WORLDS. LIMITLESS IDENTITIES.</div>
+<p>Every positive whole number is a fictional, algorithmically generated identity. Nothing is stored; each profile is computed from its ID.</p>
+<button class="btn pri" id="exp2">Explore Universe</button></section>
+<main id="feed" aria-label="Profile feed"></main>
+<div id="pv" role="dialog" aria-modal="true" aria-label="Profile"><div class="pw" id="pw"></div></div>
+<script src="script.js" defer></script></body></html>
