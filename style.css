@@ -10,3 +10,20 @@
 @media(max-width:900px){.profile-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.hero{padding-top:78px}.orbit-one{right:-18%;opacity:.6}.orbit-two{right:-30%;opacity:.6}}
 @media(max-width:620px){.topbar{height:66px;padding:0 17px;gap:15px}.brand{font-size:12px;letter-spacing:.1em;gap:8px}.brand-mark{width:29px;height:29px}.topnav{gap:14px;font-size:11px}.topbar>.icon-button{width:38px;height:38px}.hero{padding:70px 19px 61px}.hero h1{font-size:clamp(36px,10vw,55px)}.hero>p{font-size:13px}.hero-stats{gap:20px;margin-top:39px}.hero-stats strong{font-size:16px}.hero-stats span{font-size:9px}.orbit-one{top:100px;right:-70%;width:380px}.orbit-two{top:110px;right:-95%;width:430px}.universe-section{padding:20px 17px 60px}.section-heading{align-items:flex-start;flex-direction:column;gap:13px}.section-heading h2{font-size:28px}.profile-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.profile-card{padding:14px 10px 12px;border-radius:14px}.avatar{width:57px;height:57px}.profile-card h3{font-size:12px}.card-index,.card-id{font-size:9px}.footer{padding:20px 17px 26px;flex-direction:column;font-size:8px}.search-overlay{padding:5vh 10px 12px}.search-panel{padding:21px 16px;border-radius:19px}.search-input-row{flex-direction:column}.search-input-row .button{width:100%}.panel-top h2{font-size:24px}.profile-detail{padding:33px 18px 22px}.detail-orb{width:105px;height:105px}.detail-actions .button{flex:1}.detail-navigation .button{font-size:11px;padding:0 9px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+
+/* Mobile viewport/layout correction: never leave a desktop-width page on the right. */
+html, body { width: 100%; max-width: 100%; min-width: 0; }
+body { overflow-x: clip; }
+.topbar, main, .hero, .universe-section, .footer { width: 100%; max-width: 100%; min-width: 0; }
+.hero, .universe-section, .footer { margin-left: auto; margin-right: auto; }
+@media (max-width: 620px) {
+  .topbar { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); gap: 10px; }
+  .hero { padding-left: 18px; padding-right: 18px; }
+  .universe-section { padding-left: 14px; padding-right: 14px; }
+  .profile-grid { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .profile-card { min-width: 0; padding: 13px 9px 12px; }
+  .hero h1 { overflow-wrap: anywhere; }
+  .orbit-one, .orbit-two { max-width: 100vw; }
+  .footer { padding-left: 14px; padding-right: 14px; }
+}

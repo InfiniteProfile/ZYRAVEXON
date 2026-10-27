@@ -122,6 +122,7 @@
     const card = document.createElement("button");
     card.type = "button";
     card.className = "profile-card";
+    card.dataset.profileId = profile.id;
     card.setAttribute("aria-label", `Open ${profile.name}, profile ID ${profile.id}`);
     card.style.setProperty("--accent", profile.palette[0]);
     card.style.setProperty("--avatar-bg", profile.palette[2]);
@@ -150,12 +151,12 @@
     return card;
   }
 
-  const BATCH_SIZE = 20;
-  const MAX_RENDERED = 80; // DOM window cap, not a universe/profile ID limit.
+  const BATCH_SIZE = 300;
+  const GENERATION_THRESHOLD = 100;
   const NAME_SEARCH_WINDOW = 500;
   let nextFeedId = 1n;
   let loading = false;
-  let observer = null;
+  let nextGenerationAt = 100n;
   let toastTimer = 0;
   let lastFocus = null;
 
@@ -167,11 +168,6 @@
     if (loading) return;
     loading = true;
     $("#feed-status-text").textContent = "Generating identities";
-    const anchor = Array.from(grid.children).find(card => {
-      const rect = card.getBoundingClientRect();
-      return rect.bottom > 0 && rect.top < window.innerHeight;
-    });
-    const anchorTopBefore = anchor ? anchor.getBoundingClientRect().top : null;
     const fragment = document.createDocumentFragment();
     for (let i = 0; i < BATCH_SIZE; i++) {
       const id = nextFeedId.toString();
@@ -179,30 +175,28 @@
       nextFeedId += 1n;
     }
     grid.appendChild(fragment);
-    // Keep only a bounded DOM window. Preserve the first visible card's screen position
-    // when older cards are recycled, avoiding a sudden jump on long sessions.
-    while (grid.children.length > MAX_RENDERED) grid.firstElementChild.remove();
-    if (anchor && anchor.isConnected && anchorTopBefore !== null) {
-      const anchorTopAfter = anchor.getBoundingClientRect().top;
-      if (Math.abs(anchorTopAfter - anchorTopBefore) > 1) window.scrollBy(0, anchorTopAfter - anchorTopBefore);
-    }
     updateCount();
     loading = false;
     $("#feed-status-text").textContent = "Universe active";
   }
 
-  function nearBottom() {
-    const distance = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
-    if (distance < 1100) renderBatch();
-  }
-
-  function observeSentinel() {
-    if (!("IntersectionObserver" in window)) return;
-    if (observer) observer.disconnect();
-    observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) renderBatch();
-    }, { root: null, rootMargin: "1000px 0px", threshold: 0 });
-    observer.observe(sentinel);
+  // Generate another 300 only when the user has actually reached the threshold.
+  // This never changes scroll position and doesn't use a timer or auto-scroll.
+  function checkGenerationThreshold() {
+    if (loading || !grid.children.length) return;
+    const cards = grid.children;
+    let highestVisibleId = 0n;
+    for (let i = 0; i < cards.length; i++) {
+      const rect = cards[i].getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        const id = cards[i].dataset.profileId;
+        if (id && /^[0-9]+$/.test(id) && BigInt(id) > highestVisibleId) highestVisibleId = BigInt(id);
+      }
+    }
+    if (highestVisibleId >= nextGenerationAt) {
+      renderBatch();
+      nextGenerationAt += BigInt(BATCH_SIZE);
+    }
   }
 
   function showToast(message) {
@@ -396,8 +390,8 @@
     }
   });
 
-  window.addEventListener("scroll", nearBottom, { passive: true });
-  window.addEventListener("resize", nearBottom, { passive: true });
+  window.addEventListener("scroll", checkGenerationThreshold, { passive: true });
+  window.addEventListener("resize", checkGenerationThreshold, { passive: true });
   window.addEventListener("popstate", () => {
     const id = new URL(window.location.href).searchParams.get("profile");
     if (id && canonicalId(id)) {
@@ -410,8 +404,8 @@
 
   // Initial view and direct profile links (including very long query-string IDs).
   renderBatch();
-  renderBatch();
-  observeSentinel();
+  // 300 profiles are available on first load; no automatic page scrolling.
+  nextGenerationAt = BigInt(GENERATION_THRESHOLD);
   const initialId = new URL(window.location.href).searchParams.get("profile");
   if (initialId !== null) {
     if (canonicalId(initialId)) openProfile(initialId, false);
