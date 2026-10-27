@@ -1,414 +1,208 @@
 (() => {
-  "use strict";
+  'use strict';
 
-  /*
-   * ZYRAVEXON deterministic identity engine.
-   * IDs remain canonical decimal strings; BigInt is used only for exact
-   * increment/decrement and bounded feed offsets. No Number conversion is
-   * applied to a user-supplied profile ID.
-   *
-   * Name search strategy: scan a deterministic window of 500 IDs beginning
-   * at the current feed cursor. This is intentionally bounded and does not
-   * claim to search the infinite identity space.
-   */
+  const INITIAL_BATCH = 300;
+  const APPEND_BATCH = 300;
+  const PREFETCH_AT = 100;
+  const grid = document.getElementById('profile-grid');
+  const countLabel = document.getElementById('generated-count');
+  const status = document.getElementById('status');
+  const loadStatus = document.getElementById('load-status');
+  const sentinel = document.getElementById('sentinel');
+  const searchDialog = document.getElementById('search-dialog');
+  const profileDialog = document.getElementById('profile-dialog');
+  const searchInput = document.getElementById('search-input');
+  const searchResult = document.getElementById('search-result');
+  const profileDetail = document.getElementById('profile-detail');
 
-  const $ = (selector, root = document) => root.querySelector(selector);
-  const grid = $("#profile-grid");
-  const sentinel = $("#feed-sentinel");
-  const overlay = $("#search-overlay");
-  const profileOverlay = $("#profile-overlay");
-  const searchInput = $("#profile-id-input");
-  const nameInput = $("#profile-name-input");
-  const searchMessage = $("#search-message");
-  const nameResults = $("#name-results");
-  const toast = $("#toast");
+  const prefixes = ['Oryn','Astra','Luma','Kael','Nyra','Vexa','Zyra','Ely','Aeri','Sol','Novi','Vey','Orbi','Xylo','Mira','Thalen','Auri','Kairo','Nexa','Vori','Ily','Zeno','Rhea','Cyr'];
+  const suffixes = ['Aeris','Vex','Sol','Aeris','Nova','Thane','Lyra','Vorn','Mira','Quin','Ryn','Vale','Nox','Lune','Dara','Zen','Vara','Keth','Sora','Myth','Aven','Taris','Elion','Vey'];
+  const colors = ['#c9f27a','#efc2ff','#d9a5ff','#aa8aff','#7deef0','#ffadcf','#f4c878','#91b9ff','#ff9e86','#a6f2c4'];
+  const symbols = ['✦','✧','◈','✺','✹','✵','❖','✷','✴','◇','☼','✶'];
+  const namesSeen = new Map();
+  let generated = 0n;
+  let nextId = 1n;
+  let generating = false;
+  let pending = false;
+  let nextTrigger = BigInt(PREFETCH_AT);
+  let observer = null;
 
-  const FIRST_NAMES = [
-    "Aev", "Nyx", "Zyra", "Vey", "Kael", "Astra", "Vael", "Luma",
-    "Orin", "Xyra", "Nexa", "Eryx", "Cyr", "Zev", "Ilyra", "Noct",
-    "Auri", "Vel", "Thyra", "Riven", "Sora", "Elun", "Vexa", "Mira",
-    "Kairo", "Lyrix", "Oryn", "Zalen", "Nira", "Aether", "Syl", "Rhea"
-  ];
-  const LAST_NAMES = [
-    "vex", "aeris", "nyth", "ora", "ion", "aris", "yx", "eon",
-    "thys", "vane", "lune", "axis", "zen", "oryn", "veil", "ara",
-    "cyon", "elle", "nova", "rune", "eth", "aris", "yra", "exis",
-    "quill", "drax", "sol", "vyr", "aura", "zenith", "nox", "elys"
-  ];
-  const PALETTES = [
-    ["#a78bfa", "#5b36b8", "#17122b"],
-    ["#64e7ef", "#167b91", "#0b2028"],
-    ["#ed9aff", "#8c3fa9", "#26132d"],
-    ["#8ce6b8", "#287f75", "#10271f"],
-    ["#f0c7ff", "#8355db", "#21162f"],
-    ["#80baff", "#3566bd", "#101c35"],
-    ["#e4a6cb", "#a14f8b", "#291528"],
-    ["#c8e879", "#6c8531", "#1e2810"]
-  ];
-  const ARCHETYPES = ["The Quiet Voyager", "Keeper of the Violet Gate", "Wanderer Between Stars", "Architect of Echoes", "The Uncharted Mind", "Guardian of the Far Horizon", "Collector of Lost Light", "The Infinite Observer"];
-  const TRAITS = ["Nebula-born", "Signal Weaver", "Void Cartographer", "Starlight Nomad", "Dream Architect", "Quantum Pilgrim", "Orbit Keeper", "Echo Seeker"];
-  const SYMBOLS = ["✦", "◈", "⌬", "⟡", "✧", "◇", "⊹", "⧫"];
-
-  function canonicalId(raw) {
-    const value = String(raw ?? "").trim();
-    if (!/^[0-9]+$/.test(value)) return null;
-    const normalized = value.replace(/^0+/, "");
-    return normalized.length ? normalized : null;
-  }
-
-  function addOne(id) { return (BigInt(id) + 1n).toString(); }
-  function subtractOne(id) { return BigInt(id) > 1n ? (BigInt(id) - 1n).toString() : null; }
-
-  // Stable FNV-1a-style 32-bit hash over every digit, with a second mixing pass.
-  function hashId(id, salt = "") {
-    const input = `${salt}:${id}`;
-    let h = 2166136261;
-    for (let i = 0; i < input.length; i++) {
-      h ^= input.charCodeAt(i);
-      h = Math.imul(h, 16777619);
+  function hashId(id) {
+    // Stable string-based hash; works with IDs far beyond Number.MAX_SAFE_INTEGER.
+    const s = String(id);
+    let h1 = 2166136261 >>> 0;
+    let h2 = 0x9e3779b9 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+      h1 = Math.imul(h1 ^ s.charCodeAt(i), 16777619) >>> 0;
+      h2 = (Math.imul(h2 ^ s.charCodeAt(i), 2246822519) + 3266489917) >>> 0;
     }
-    h ^= h >>> 16;
-    h = Math.imul(h, 0x7feb352d);
-    h ^= h >>> 15;
-    h = Math.imul(h, 0x846ca68b);
-    h ^= h >>> 16;
-    return h >>> 0;
+    return [h1, h2];
   }
 
-  function pick(list, id, salt) { return list[hashId(id, salt) % list.length]; }
-  function makeAvatar(id, palette, symbol) {
-    const h1 = hashId(id, "avatar-a") % 360;
-    const h2 = hashId(id, "avatar-b") % 360;
-    const turn = hashId(id, "avatar-turn") % 360;
-    const ring = 16 + (hashId(id, "avatar-ring") % 24);
-    const cx = 50 + (hashId(id, "avatar-x") % 13) - 6;
-    const cy = 50 + (hashId(id, "avatar-y") % 13) - 6;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><radialGradient id="g"><stop stop-color="hsl(${h1} 90% 74%)"/><stop offset="1" stop-color="hsl(${h2} 70% 20%)"/></radialGradient><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${palette[0]}"/><stop offset="1" stop-color="${palette[1]}"/></linearGradient></defs><rect width="100" height="100" rx="50" fill="${palette[2]}"/><circle cx="${cx}" cy="${cy}" r="${ring}" fill="url(#g)" opacity=".92"/><circle cx="50" cy="50" r="37" fill="none" stroke="url(#b)" stroke-width="1.4" opacity=".9"/><ellipse cx="50" cy="50" rx="43" ry="18" transform="rotate(${turn} 50 50)" fill="none" stroke="${palette[0]}" stroke-width=".8" opacity=".7"/><path d="M50 23 56 43 77 50 56 57 50 77 44 57 23 50 44 43Z" fill="${palette[0]}" opacity=".88"/><circle cx="50" cy="50" r="5" fill="#fff"/><text x="50" y="89" font-size="9" fill="#fff" text-anchor="middle" opacity=".9">${symbol}</text></svg>`;
-    return `url("data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}")`;
+  function identity(id) {
+    const [a, b] = hashId(id);
+    const prefix = prefixes[a % prefixes.length];
+    const suffix = suffixes[b % suffixes.length];
+    const tail = ((a >>> 7) % 9) ? '' : String((b % 89) + 10);
+    const name = prefix + suffix + tail;
+    return {
+      id: String(id), name,
+      color: colors[(a ^ (b >>> 3)) % colors.length],
+      symbol: symbols[(b ^ (a >>> 5)) % symbols.length],
+      world: ['Celestial','Astral','Luminous','Forgotten','Ethereal','Quantum','Stellar','Hidden'][(a >>> 4) % 8],
+      story: `A ${['quiet','ancient','curious','radiant','enigmatic','restless','brilliant','unmapped'][(b >>> 6) % 8]} identity from a ${['violet','crystal','distant','shifting','silver','echoing','forgotten','living'][(a >>> 9) % 8]} world. Its signature is generated deterministically from identity ${id}.`
+    };
   }
 
-  function generateProfile(rawId) {
-    const id = canonicalId(rawId);
-    if (!id) throw new Error("Enter a positive decimal integer greater than zero.");
-    const first = pick(FIRST_NAMES, id, "first");
-    const last = pick(LAST_NAMES, id, "last");
-    const palette = pick(PALETTES, id, "palette");
-    const symbol = pick(SYMBOLS, id, "symbol");
-    const name = `${first}${last.charAt(0).toUpperCase()}${last.slice(1)}`;
-    const archetype = pick(ARCHETYPES, id, "archetype");
-    const trait = pick(TRAITS, id, "trait");
-    const avatar = makeAvatar(id, palette, symbol);
-    const hue = hashId(id, "hue") % 360;
-    const bio = `${archetype}. A fictional ${trait.toLowerCase()} charting a personal path through the ZYRAVEXON universe. Identity signature ${symbol} ${id.slice(-Math.min(6, id.length))}.`;
-    return { id, name, palette, symbol, archetype, trait, avatar, bio, hue };
-  }
-
-  function profileUrl(id) {
-    // Query routing works on static hosts, including GitHub Pages project sites.
-    const url = new URL(window.location.href);
-    url.search = "";
-    url.hash = "";
-    url.searchParams.set("profile", id);
-    return url.href;
-  }
-
-  function applyAvatar(element, profile) {
-    element.style.backgroundImage = profile.avatar;
-    element.style.backgroundColor = profile.palette[2];
-    element.style.setProperty("--accent", profile.palette[0]);
-  }
-
-  function createCard(profile) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "profile-card";
-    card.dataset.profileId = profile.id;
-    card.setAttribute("aria-label", `Open ${profile.name}, profile ID ${profile.id}`);
-    card.style.setProperty("--accent", profile.palette[0]);
-    card.style.setProperty("--avatar-bg", profile.palette[2]);
-    const top = document.createElement("div");
-    top.className = "card-top";
-    const index = document.createElement("span");
-    index.className = "card-index";
-    index.textContent = "IDENTITY /";
-    const orbit = document.createElement("span");
-    orbit.className = "card-orbit";
-    top.append(index, orbit);
-    const avatar = document.createElement("span");
-    avatar.className = "avatar";
-    avatar.setAttribute("aria-hidden", "true");
-    applyAvatar(avatar, profile);
-    const name = document.createElement("h3");
-    name.textContent = profile.name;
-    const id = document.createElement("div");
-    id.className = "card-id";
-    id.textContent = `#${profile.id}`;
-    const bottom = document.createElement("div");
-    bottom.className = "card-bottom";
-    bottom.textContent = `${profile.symbol}  VIEW IDENTITY  ↗`;
-    card.append(top, avatar, name, id, bottom);
-    card.addEventListener("click", () => openProfile(profile.id));
+  function makeCard(person) {
+    const card = document.createElement('article');
+    card.className = 'profile-card';
+    card.style.setProperty('--accent', person.color);
+    card.dataset.id = person.id;
+    const top = document.createElement('div');
+    top.className = 'card-top';
+    const label = document.createElement('span'); label.textContent = 'IDENTITY / ' + person.id;
+    const dot = document.createElement('span'); dot.className = 'identity-dot';
+    top.append(label, dot);
+    const sigilWrap = document.createElement('div'); sigilWrap.className = 'sigil-wrap';
+    const sigil = document.createElement('div'); sigil.className = 'sigil'; sigil.textContent = person.symbol; sigil.setAttribute('aria-hidden', 'true');
+    sigilWrap.append(sigil);
+    const info = document.createElement('div'); info.className = 'card-info';
+    const name = document.createElement('h3'); name.textContent = person.name;
+    const id = document.createElement('p'); id.textContent = '#' + person.id;
+    info.append(name, id);
+    const open = document.createElement('button'); open.className = 'card-open'; open.type = 'button'; open.textContent = person.symbol + '  VIEW IDENTITY ↗';
+    open.addEventListener('click', () => showProfile(person));
+    card.append(top, sigilWrap, info, open);
     return card;
   }
 
-  const BATCH_SIZE = 300;
-  const GENERATION_THRESHOLD = 100;
-  const NAME_SEARCH_WINDOW = 500;
-  let nextFeedId = 1n;
-  let loading = false;
-  let nextGenerationAt = 100n;
-  let toastTimer = 0;
-  let lastFocus = null;
-
   function updateCount() {
-    $("#visible-count").textContent = String(grid.children.length);
+    countLabel.textContent = generated.toString();
+    status.textContent = 'Universe active';
   }
 
-  function renderBatch() {
-    if (loading) return;
-    loading = true;
-    $("#feed-status-text").textContent = "Generating identities";
+  function appendBatch(size) {
+    if (generating) { pending = true; return; }
+    generating = true;
+    loadStatus.textContent = 'Generating the next worlds…';
+    // Build in animation-frame chunks to avoid blocking low-end phones.
+    let made = 0;
     const fragment = document.createDocumentFragment();
-    for (let i = 0; i < BATCH_SIZE; i++) {
-      const id = nextFeedId.toString();
-      fragment.appendChild(createCard(generateProfile(id)));
-      nextFeedId += 1n;
-    }
-    grid.appendChild(fragment);
-    updateCount();
-    loading = false;
-    $("#feed-status-text").textContent = "Universe active";
-  }
-
-  // Generate another 300 only when the user has actually reached the threshold.
-  // This never changes scroll position and doesn't use a timer or auto-scroll.
-  function checkGenerationThreshold() {
-    if (loading || !grid.children.length) return;
-    const cards = grid.children;
-    let highestVisibleId = 0n;
-    for (let i = 0; i < cards.length; i++) {
-      const rect = cards[i].getBoundingClientRect();
-      if (rect.top < window.innerHeight && rect.bottom > 0) {
-        const id = cards[i].dataset.profileId;
-        if (id && /^[0-9]+$/.test(id) && BigInt(id) > highestVisibleId) highestVisibleId = BigInt(id);
+    function chunk() {
+      const limit = Math.min(made + 50, size);
+      while (made < limit) {
+        const person = identity(nextId);
+        namesSeen.set(person.name.toLowerCase(), person.id);
+        fragment.append(makeCard(person));
+        nextId += 1n;
+        made++;
+      }
+      grid.append(fragment);
+      // The next ID is the authoritative count, including arbitrarily large IDs.
+      generated = nextId - 1n;
+      updateCount();
+      if (made < size) {
+        requestAnimationFrame(chunk);
+      } else {
+        generating = false;
+        loadStatus.textContent = 'More worlds will appear as you explore.';
+        if (pending) { pending = false; appendBatch(APPEND_BATCH); }
       }
     }
-    if (highestVisibleId >= nextGenerationAt) {
-      renderBatch();
-      nextGenerationAt += BigInt(BATCH_SIZE);
+    requestAnimationFrame(chunk);
+  }
+
+  function ensureAhead() {
+    if (generating || generated < nextTrigger) return;
+    // Find the first profile currently entering the viewport. This threshold is based
+    // on actual profile cards, not scroll height, so responsive grids behave correctly.
+    const cards = grid.children;
+    let visibleIndex = -1;
+    for (let i = 0; i < cards.length; i++) {
+      if (cards[i].getBoundingClientRect().bottom >= 0) { visibleIndex = i; break; }
     }
+    if (visibleIndex < 0 || BigInt(visibleIndex + 1) < nextTrigger) return;
+    nextTrigger += BigInt(APPEND_BATCH);
+    appendBatch(APPEND_BATCH);
   }
 
-  function showToast(message) {
-    toast.textContent = message;
-    toast.classList.add("show");
-    window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => toast.classList.remove("show"), 2400);
+  function showProfile(person) {
+    profileDetail.replaceChildren();
+    const wrap = document.createElement('div'); wrap.className = 'detail-profile'; wrap.style.setProperty('--accent', person.color);
+    const sigil = document.createElement('div'); sigil.className = 'sigil'; sigil.textContent = person.symbol;
+    const eyebrow = document.createElement('div'); eyebrow.className = 'eyebrow'; eyebrow.textContent = person.world.toUpperCase() + ' WORLD';
+    const h = document.createElement('h2'); h.textContent = person.name;
+    const id = document.createElement('div'); id.className = 'detail-id'; id.textContent = 'IDENTITY #' + person.id;
+    const story = document.createElement('p'); story.textContent = person.story;
+    const actions = document.createElement('div'); actions.className = 'detail-actions';
+    const copy = document.createElement('button'); copy.className = 'button secondary'; copy.textContent = 'Copy identity ID';
+    copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(person.id); copy.textContent = 'Copied!'; } catch { copy.textContent = person.id; } });
+    actions.append(copy); wrap.append(sigil, eyebrow, h, id, story, actions); profileDetail.append(wrap);
+    if (!profileDialog.open) profileDialog.showModal();
   }
 
-  function openSearch() {
-    lastFocus = document.activeElement;
-    overlay.hidden = false;
-    searchMessage.textContent = "";
-    searchMessage.classList.remove("error");
-    nameResults.replaceChildren();
-    window.setTimeout(() => searchInput.focus(), 0);
-  }
-  function closeSearch() {
-    overlay.hidden = true;
-    if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
+  function canonicalId(raw) {
+    const s = raw.trim();
+    if (!/^\d+$/.test(s)) return null;
+    const normalized = s.replace(/^0+(?=\d)/, '');
+    return normalized === '0' ? null : normalized;
   }
 
-  function openProfile(rawId, updateHistory = true) {
-    const id = canonicalId(rawId);
-    if (!id) { showToast("That profile ID is not valid."); return; }
-    const profile = generateProfile(id);
-    if (updateHistory) {
-      const url = new URL(window.location.href);
-      url.search = "";
-      url.hash = "";
-      url.searchParams.set("profile", id);
-      history.pushState({ profile: id }, "", url);
-    }
-    renderProfileDetail(profile);
-    profileOverlay.hidden = false;
-    closeSearch();
-    $("#detail-feedback").textContent = "";
-    $("#detail-name").focus?.({ preventScroll: true });
+  function showSearchResult(person) {
+    searchResult.replaceChildren();
+    const row = document.createElement('div'); row.className = 'result-card'; row.style.setProperty('--accent', person.color);
+    const sigil = document.createElement('div'); sigil.className = 'sigil'; sigil.textContent = person.symbol;
+    const content = document.createElement('div'); const h = document.createElement('h3'); h.textContent = person.name;
+    const p = document.createElement('p'); p.textContent = 'IDENTITY #' + person.id;
+    const open = document.createElement('button'); open.className = 'button secondary'; open.textContent = 'Open identity'; open.style.marginTop = '9px'; open.addEventListener('click', () => showProfile(person));
+    content.append(h,p,open); row.append(sigil,content); searchResult.append(row);
   }
 
-  function renderProfileDetail(profile) {
-    const detail = $(".profile-detail");
-    detail.style.setProperty("--detail-accent", profile.palette[0]);
-    detail.style.setProperty("--detail-avatar", profile.avatar);
-    $("#detail-orb").style.backgroundImage = profile.avatar;
-    $("#detail-orb").style.backgroundColor = profile.palette[2];
-    $("#detail-name").textContent = profile.name;
-    $("#detail-id").textContent = profile.id;
-    $("#detail-bio").textContent = profile.bio;
-    const tags = $("#detail-tags");
-    tags.replaceChildren();
-    [profile.archetype, profile.trait, `Signature ${profile.symbol}`].forEach(label => {
-      const tag = document.createElement("span");
-      tag.textContent = label;
-      tags.appendChild(tag);
-    });
-    $("#previous-profile").disabled = !subtractOne(profile.id);
-    $("#previous-profile").style.opacity = subtractOne(profile.id) ? "1" : ".42";
-    $("#copy-link").dataset.profileId = profile.id;
-    $("#share-profile").dataset.profileId = profile.id;
-    $("#previous-profile").dataset.profileId = profile.id;
-    $("#next-profile").dataset.profileId = profile.id;
-  }
-
-  function closeProfile(updateHistory = true) {
-    profileOverlay.hidden = true;
-    if (updateHistory) {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("profile");
-      history.pushState({}, "", url);
-    }
-  }
-
-  function submitIdSearch(event) {
+  document.getElementById('open-search').addEventListener('click', () => { searchDialog.showModal(); searchInput.focus(); });
+  document.getElementById('hero-search').addEventListener('click', () => { searchDialog.showModal(); searchInput.focus(); });
+  document.getElementById('close-profile').addEventListener('click', () => profileDialog.close());
+  document.getElementById('search-form').addEventListener('submit', event => {
     event.preventDefault();
-    const id = canonicalId(searchInput.value);
-    if (!id) {
-      searchMessage.textContent = "Enter a valid positive integer using decimal digits only. Zero is not a profile ID.";
-      searchMessage.classList.add("error");
+    const value = searchInput.value.trim();
+    const id = canonicalId(value);
+    if (id) {
+      const person = identity(id);
+      showSearchResult(person);
       return;
     }
-    searchMessage.classList.remove("error");
-    searchMessage.textContent = `Opening exact profile ID ${id}…`;
-    openProfile(id);
-  }
+    const target = value.toLowerCase();
+    let foundId = namesSeen.get(target);
+    if (!foundId) {
+      // Deterministic local search window, not a claim that arbitrary names can be exhaustively searched.
+      for (let i = 1n; i <= 5000n; i++) {
+        const person = identity(i);
+        if (person.name.toLowerCase() === target) { foundId = person.id; break; }
+      }
+    }
+    if (foundId) showSearchResult(identity(foundId));
+    else { searchResult.textContent = 'No exact generated name found. Try an identity ID, which supports arbitrarily long numbers.'; searchResult.className = 'hint'; }
+  });
 
-  function searchNames(event) {
-    event.preventDefault();
-    const query = nameInput.value.trim().toLocaleLowerCase();
-    nameResults.replaceChildren();
-    if (!query) {
-      searchMessage.textContent = "Enter a name or part of a generated name to search.";
-      searchMessage.classList.add("error");
-      return;
-    }
-    searchMessage.classList.remove("error");
-    searchMessage.textContent = `Searching a deterministic window of ${NAME_SEARCH_WINDOW} IDs…`;
-    const matches = [];
-    // The window starts at the feed cursor and wraps to ID 1 if it reaches no practical boundary.
-    const start = nextFeedId;
-    for (let i = 0n; i < BigInt(NAME_SEARCH_WINDOW); i++) {
-      const p = generateProfile((start + i).toString());
-      if (p.name.toLocaleLowerCase().includes(query)) matches.push(p);
-      if (matches.length >= 8) break;
-    }
-    if (!matches.length) {
-      searchMessage.textContent = `No matches in this ${NAME_SEARCH_WINDOW}-ID search window. Try a shorter name fragment or search by exact ID.`;
-      return;
-    }
-    searchMessage.textContent = `${matches.length} matching result${matches.length === 1 ? "" : "s"} in the checked window.`;
-    matches.forEach(profile => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "result-row";
-      const avatar = document.createElement("span");
-      avatar.className = "avatar";
-      applyAvatar(avatar, profile);
-      const copy = document.createElement("span");
-      copy.className = "result-copy";
-      const strong = document.createElement("strong");
-      strong.textContent = profile.name;
-      const id = document.createElement("span");
-      id.textContent = `PROFILE ID #${profile.id}`;
-      copy.append(strong, id);
-      button.append(avatar, copy);
-      button.addEventListener("click", () => openProfile(profile.id));
-      nameResults.appendChild(button);
+  // Observe the feed end as a backup trigger. It never changes scroll position.
+  if ('IntersectionObserver' in window) {
+    observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) ensureAhead();
+    }, { root: null, rootMargin: '1200px 0px', threshold: 0 });
+    observer.observe(sentinel);
+  }
+  // Scroll fallback plus threshold check; passive listener does not call scrollTo/scrollIntoView.
+  let scrollQueued = false;
+  window.addEventListener('scroll', () => {
+    if (scrollQueued) return;
+    scrollQueued = true;
+    requestAnimationFrame(() => {
+      scrollQueued = false;
+      const near = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 1500;
+      if (near) ensureAhead();
     });
-  }
+  }, { passive: true });
 
-  async function copyProfileLink() {
-    const id = $("#copy-link").dataset.profileId;
-    const url = profileUrl(id);
-    try {
-      await navigator.clipboard.writeText(url);
-      $("#detail-feedback").textContent = "Profile link copied.";
-    } catch {
-      const helper = document.createElement("textarea");
-      helper.value = url;
-      helper.setAttribute("readonly", "");
-      helper.style.position = "fixed";
-      helper.style.opacity = "0";
-      document.body.appendChild(helper);
-      helper.select();
-      const success = document.execCommand("copy");
-      helper.remove();
-      $("#detail-feedback").textContent = success ? "Profile link copied." : url;
-    }
-  }
-
-  async function shareProfile() {
-    const id = $("#share-profile").dataset.profileId;
-    const profile = generateProfile(id);
-    const url = profileUrl(id);
-    if (navigator.share) {
-      try { await navigator.share({ title: `${profile.name} — ZYRAVEXON`, text: `Explore fictional identity ${profile.name} (#${id}).`, url }); }
-      catch (error) { if (error?.name !== "AbortError") showToast("Sharing was not available. You can copy the profile link instead."); }
-    } else {
-      await copyProfileLink();
-      showToast("Sharing is not supported here; profile link copied where possible.");
-    }
-  }
-
-  $("#open-search").addEventListener("click", openSearch);
-  $("#hero-search").addEventListener("click", openSearch);
-  $("#explore").addEventListener("click", () => $("#universe").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
-  document.querySelectorAll("[data-close-search]").forEach(el => el.addEventListener("click", closeSearch));
-  document.querySelectorAll("[data-close-profile]").forEach(el => el.addEventListener("click", () => closeProfile()));
-  $("#search-form").addEventListener("submit", submitIdSearch);
-  $("#name-search-form").addEventListener("submit", searchNames);
-  $("#copy-link").addEventListener("click", copyProfileLink);
-  $("#share-profile").addEventListener("click", shareProfile);
-  $("#next-profile").addEventListener("click", () => openProfile(addOne($("#next-profile").dataset.profileId)));
-  $("#previous-profile").addEventListener("click", () => {
-    const previous = subtractOne($("#previous-profile").dataset.profileId);
-    if (previous) openProfile(previous);
-  });
-  $("#explore-more").addEventListener("click", () => {
-    closeProfile();
-    $("#universe").scrollIntoView({ behavior: "smooth" });
-  });
-
-  document.addEventListener("keydown", event => {
-    if (event.key === "Escape") {
-      if (!overlay.hidden) closeSearch();
-      if (!profileOverlay.hidden) closeProfile();
-    }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-      event.preventDefault();
-      openSearch();
-    }
-  });
-
-  window.addEventListener("scroll", checkGenerationThreshold, { passive: true });
-  window.addEventListener("resize", checkGenerationThreshold, { passive: true });
-  window.addEventListener("popstate", () => {
-    const id = new URL(window.location.href).searchParams.get("profile");
-    if (id && canonicalId(id)) {
-      renderProfileDetail(generateProfile(id));
-      profileOverlay.hidden = false;
-    } else {
-      profileOverlay.hidden = true;
-    }
-  });
-
-  // Initial view and direct profile links (including very long query-string IDs).
-  renderBatch();
-  // 300 profiles are available on first load; no automatic page scrolling.
-  nextGenerationAt = BigInt(GENERATION_THRESHOLD);
-  const initialId = new URL(window.location.href).searchParams.get("profile");
-  if (initialId !== null) {
-    if (canonicalId(initialId)) openProfile(initialId, false);
-    else showToast("Invalid profile ID in this URL.");
-  }
+  // Initial 300 are generated automatically in small rendering chunks.
+  appendBatch(INITIAL_BATCH);
 })();
