@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09090f">
+  <meta name="description" content="ZYRAVEXON — One universe. Infinite worlds. Limitless identities.">
+  <title>ZYRAVEXON — Infinite Identities</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <div class="cosmos" aria-hidden="true"><div class="nebula"></div><div class="stars" id="stars"></div></div>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="ZYRAVEXON home"><span class="brand-mark">Z</span><span>ZYRAVEXON</span></a>
+    <nav class="topnav" aria-label="Main navigation"><a href="#universe">Universe</a><a href="#about">About</a></nav>
+    <button class="icon-button" id="open-search" type="button" aria-label="Search profiles" title="Search profiles">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg>
+    </button>
+  </header>
+
+  <main>
+    <section class="hero" id="about">
+      <div class="eyebrow"><span class="pulse"></span> A GENERATIVE IDENTITY UNIVERSE</div>
+      <h1>ONE UNIVERSE.<br><span>INFINITE IDENTITIES.</span></h1>
+      <p>Every number opens a new world. Explore a living constellation of algorithmically generated fictional identities — each with its own name, colors, symbols, and story.</p>
+      <div class="hero-actions">
+        <button class="button button-primary" id="explore" type="button">Explore universe <span aria-hidden="true">↘</span></button>
+        <button class="button button-quiet" id="hero-search" type="button">Find an identity</button>
+      </div>
+      <div class="hero-stats"><div><strong>∞</strong><span>Possible identities</span></div><div><strong>01 → ∞</strong><span>Exact ID navigation</span></div><div><strong>0</strong><span>Accounts required</span></div></div>
+      <div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div>
+    </section>
+
+    <section class="universe-section" id="universe">
+      <div class="section-heading">
+        <div><div class="eyebrow">THE DISCOVERY FEED</div><h2>Explore the unknown<span class="heading-dot">.</span></h2></div>
+        <div class="feed-status"><span class="pulse"></span><span id="feed-status-text">Universe active</span></div>
+      </div>
+      <div class="feed-tools"><span>Generated identities <span class="muted">/</span> <span id="visible-count">0</span></span><span class="hint">Scroll to reveal more</span></div>
+      <div class="profile-grid" id="profile-grid" aria-live="polite"></div>
+      <div class="feed-loader" id="feed-sentinel" aria-label="Loading more identities"><span class="loader-ring"></span><span>Discovering more worlds</span></div>
+    </section>
+  </main>
+
+  <footer class="footer"><span>ZYRAVEXON <span class="muted">/</span> FICTIONAL IDENTITIES, INFINITE POSSIBILITY</span><span>ONE UNIVERSE. INFINITE WORLDS. LIMITLESS IDENTITIES.</span></footer>
+
+  <div class="search-overlay" id="search-overlay" hidden>
+    <div class="search-backdrop" data-close-search></div>
+    <section class="search-panel" role="dialog" aria-modal="true" aria-labelledby="search-title">
+      <div class="panel-top"><div><div class="eyebrow">IDENTITY LOCATOR</div><h2 id="search-title">Find your universe.</h2></div><button class="icon-button close-search" type="button" aria-label="Close search" data-close-search>×</button></div>
+      <form id="search-form">
+        <label for="profile-id-input">Exact profile ID</label>
+        <div class="search-input-row"><input id="profile-id-input" name="profileId" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder="Enter any positive integer…" aria-describedby="search-help"><button class="button button-primary" type="submit">Open ID ↗</button></div>
+        <p class="field-help" id="search-help">IDs are treated as exact decimal strings, including very long numbers.</p>
+      </form>
+      <div class="divider"><span>OR DISCOVER BY NAME</span></div>
+      <form id="name-search-form">
+        <label for="profile-name-input">Generated name</label>
+        <div class="search-input-row"><input id="profile-name-input" autocomplete="off" placeholder="e.g. Nyxara…"><button class="button button-secondary" type="submit">Search</button></div>
+        <p class="field-help">Name search checks a deterministic, documented window of nearby generated IDs; it does not claim to search the entire infinite universe.</p>
+      </form>
+      <div id="search-message" class="search-message" role="status"></div>
+      <div id="name-results" class="name-results"></div>
+    </section>
+  </div>
+
+  <div class="profile-overlay" id="profile-overlay" hidden>
+    <div class="profile-backdrop" data-close-profile></div>
+    <article class="profile-detail" role="dialog" aria-modal="true" aria-labelledby="detail-name">
+      <button class="icon-button detail-close" type="button" aria-label="Close profile" data-close-profile>×</button>
+      <div class="detail-orb" id="detail-orb"></div>
+      <div class="eyebrow detail-eyebrow"><span class="pulse"></span> REGISTERED FICTIONAL IDENTITY</div>
+      <h2 id="detail-name">Identity</h2>
+      <div class="detail-id">PROFILE ID <code id="detail-id"></code></div>
+      <p id="detail-bio" class="detail-bio"></p>
+      <div class="detail-tags" id="detail-tags"></div>
+      <div class="detail-actions">
+        <button class="button button-primary" id="copy-link" type="button">Copy profile link</button>
+        <button class="button button-secondary" id="share-profile" type="button">Share ↗</button>
+      </div>
+      <div class="detail-navigation"><button class="button button-quiet" id="previous-profile" type="button">← Previous</button><button class="button button-quiet" id="next-profile" type="button">Next →</button></div>
+      <button class="explore-more" id="explore-more" type="button">Return to the infinite feed ↓</button>
+      <p class="detail-feedback" id="detail-feedback" role="status"></p>
+    </article>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
